@@ -1,7 +1,13 @@
 # ip-mgr.sh
 
-`ip-mgr.sh` is a single-file Bash network configuration manager for
-Linux servers.
+`ip-mgr.sh` is a configuration manager for Linux networking that brings both a standardized syntactic command style, and the commit/rollback workflow, of enterprise network appliances to standard CLI-oriented Linux servers, while managing / generating the underlying native systemd-networkd configuration.
+
+Unlike NetworkManager or netplan, ip-mgr does not own the networking
+stack:
+
+It stages intended configuration as JSON, validates it, renders native
+systemd-networkd configuration, applies it, and keeps rollback history.
+The resulting system remains standard Linux.
 
 It provides a staged, reviewable, rollback-capable workflow for managing
 Linux network policy using plain JSON and native systemd networking
@@ -14,8 +20,8 @@ daemon, `ip-mgr.sh` lets you:
 stage changes → validate → diff → compile → apply → confirm or rollback
 ```
 
-A key feature that it supports are timed, automatic, configuration roll-backs (which it uses by default whenever changes are pushed from within an SSH session): 
->> If the deployed changes are not confirmed within 60 seconds, of being committed, it automatically rolls back and restores the prior settings.
+A valuable feature that it supports is a timed, automatic, configuration roll-back (which it uses by default whenever changes are pushed from an SSH session): 
+>> When used, deployed changes have to be confirmed within 60 seconds of being committed, or they are automatically rolled back with the prior settings being restored (so a broken connection can be re-established again).
 
 ## Why this exists
 
