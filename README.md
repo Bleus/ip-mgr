@@ -14,8 +14,8 @@ daemon, `ip-mgr.sh` lets you:
 stage changes → validate → diff → compile → apply → confirm or rollback
 ```
 
-It also supposrts automatic configuration roll-back if desired. It uses this mechanism by
-default when changes are pushed from in an SSH session. If the changes are not confirmed within 60 seconds, it automatically rolls back to the prior settings to try and prevent self-lockout situations.
+A key feature that it supports are timed, automatic, configuration roll-backs (which it uses by default whenever changes are pushed from within an SSH session): 
+>> If the deployed changes are not confirmed within 60 seconds, of being committed, it automatically rolls back and restores the prior settings.
 
 ## Why this exists
 
