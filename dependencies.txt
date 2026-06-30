@@ -1,0 +1,32 @@
+# ip-mgr.sh dependencies
+# Target platform: Debian Bookworm/Trixie-style systemd hosts
+
+# Required runtime packages
+bash
+jq
+iproute2
+systemd
+diffutils
+coreutils
+findutils
+mawk
+sed
+grep
+
+# Recommended runtime packages
+sudo
+systemd-resolved
+systemd-timesyncd
+
+# Optional feature packages
+network-manager
+apt
+opendoas
+
+# Optional command/feature note:
+# systemd-creds is used for PPPoE secret encryption when available.
+# It is usually provided by the systemd package.
+
+# Workstation-only sync/development tools
+git
+powershell
