@@ -21,7 +21,7 @@ stage changes → validate → diff → compile → apply → confirm or rollbac
 ```
 
 A valuable feature that it supports is a timed, automatic, configuration roll-back (which it uses by default whenever changes are pushed from an SSH session): 
->> When used, deployed changes have to be confirmed within 60 seconds of being committed, or they are automatically rolled back with the prior settings being restored (so a broken connection can be re-established again).
+> When used, deployed changes have to be confirmed within 60 seconds of being committed, or they are automatically rolled back with the prior settings being restored (so a broken connection can be re-established again).
 
 ## Why this exists
 
