@@ -1,0 +1,609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nxios.ca/schemas/ip-mgr.schema.json",
+  "title": "ip-mgr Network State",
+  "description": "Canonical NetworkState document used by ip-mgr for candidate, expected, actual and snapshot states.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_version",
+    "managed_by",
+    "host",
+    "resolver",
+    "interfaces"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "NetworkState schema revision."
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ip-mgr version that produced this state."
+    },
+    "managed_by": {
+      "type": "string",
+      "const": "ip-mgr",
+      "description": "Generator identity."
+    },
+    "created": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "modified": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "host": {
+      "$ref": "#/$defs/host"
+    },
+    "resolver": {
+      "$ref": "#/$defs/resolver"
+    },
+    "ntp": {
+      "$ref": "#/$defs/ntp"
+    },
+    "interfaces": {
+      "type": "object",
+      "description": "Interface objects keyed by Linux interface name.",
+      "propertyNames": {
+        "$ref": "#/$defs/interfaceName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/interface"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "interfaceName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "host": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "resolver": {
+      "type": "object",
+      "required": [
+        "dns",
+        "search_domains"
+      ],
+      "properties": {
+        "dns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ipAddress"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "search_domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": true
+    },
+    "ntp": {
+      "type": "object",
+      "properties": {
+        "servers": {
+          "type": "array",
+          "description": "NTP server addresses or hostnames for systemd-timesyncd.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": true,
+      "default": {}
+    },
+    "interface": {
+      "type": "object",
+      "required": [
+        "managed",
+        "transport",
+        "kind",
+        "enabled",
+        "ipv4",
+        "ipv6",
+        "resolver"
+      ],
+      "properties": {
+        "managed": {
+          "type": "boolean"
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "ethernet",
+            "tunnel"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ethernet",
+            "vlan",
+            "wifi",
+            "pppoe",
+            "wireguard",
+            "tun",
+            "tap",
+            "gre",
+            "nhrp",
+            "ike"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "mtu": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 576,
+              "maximum": 65535
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Parent interface name for VLAN sub-interfaces."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vlan_id": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4094
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ipv4": {
+          "$ref": "#/$defs/ipv4"
+        },
+        "ipv6": {
+          "$ref": "#/$defs/ipv6"
+        },
+        "resolver": {
+          "$ref": "#/$defs/resolver"
+        },
+        "pppoe": {
+          "$ref": "#/$defs/pppoe"
+        },
+        "observed": {
+          "$ref": "#/$defs/observed"
+        }
+      },
+      "additionalProperties": true
+    },
+    "pppoe": {
+      "type": "object",
+      "description": "PPPoE session configuration. Rendered into the parent interface's .network file.",
+      "properties": {
+        "service": {
+          "anyOf": [{"type": "string"}, {"type": "null"}],
+          "description": "PPPoE service name. Empty string means any service.",
+          "default": ""
+        },
+        "identity": {
+          "anyOf": [{"type": "string", "minLength": 1}, {"type": "null"}],
+          "description": "PPPoE username / identity."
+        },
+        "password": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["encrypted"],
+              "properties": {
+                "encrypted": {
+                  "type": "string",
+                  "description": "systemd-creds encrypted password, base64-encoded."
+                }
+              }
+            }
+          ],
+          "description": "Encrypted PPPoE password. Set via --pass:; never stored in plaintext."
+        }
+      },
+      "additionalProperties": true
+    },
+    "ipv4": {
+      "type": "object",
+      "required": [
+        "dhcp",
+        "addresses",
+        "gateways",
+        "routes"
+      ],
+      "properties": {
+        "dhcp": {
+          "type": "boolean"
+        },
+        "addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/addressObject"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "gateways": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gatewayObject"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/routeObject"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": true
+    },
+    "ipv6": {
+      "type": "object",
+      "required": [
+        "dhcp",
+        "accept_ra",
+        "options",
+        "addresses",
+        "gateways",
+        "routes"
+      ],
+      "properties": {
+        "dhcp": {
+          "type": "boolean"
+        },
+        "accept_ra": {
+          "type": "boolean"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "stable",
+              "privacy",
+              "none"
+            ]
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/addressObject"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "gateways": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gatewayObject"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/routeObject"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "options": {
+                "contains": {
+                  "const": "none"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "options": {
+                "maxItems": 1,
+                "items": {
+                  "const": "none"
+                }
+              },
+              "accept_ra": {
+                "const": false
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "addressObject": {
+      "type": "object",
+      "required": [
+        "address"
+      ],
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "CIDR address. IPv6 link-local fe80::/10 is not allowed as configured address.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/cidr"
+            },
+            {
+              "not": {
+                "$ref": "#/$defs/ipv6LinkLocalCidr"
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "gatewayObject": {
+      "type": "object",
+      "required": [
+        "address"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/ipAddress"
+        },
+        "metric": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "link"
+          ],
+          "default": "global"
+        },
+        "on_link": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "routeObject": {
+      "type": "object",
+      "required": [
+        "destination"
+      ],
+      "properties": {
+        "destination": {
+          "$ref": "#/$defs/cidr"
+        },
+        "gateway": {
+          "$ref": "#/$defs/gatewayObject"
+        },
+        "metric": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": true
+    },
+    "observed": {
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "type": "array",
+          "description": "Observed non-link-local addresses on interfaces that are not currently managed as intended config.",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/cidr"
+              },
+              {
+                "not": {
+                  "$ref": "#/$defs/ipv6LinkLocalCidr"
+                }
+              }
+            ]
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "link_local": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ipv6LinkLocalCidr"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "gateways": {
+          "type": "array",
+          "description": "Observed LLA or unmanaged default gateway addresses (RA-managed; not written as static config).",
+          "items": {
+            "$ref": "#/$defs/ipAddress"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "dynamic": {
+          "type": "object",
+          "properties": {
+            "dhcp4": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ipv4Cidr"
+              },
+              "uniqueItems": true,
+              "default": []
+            },
+            "ra": {
+              "type": "array",
+              "items": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/ipv6Cidr"
+                  },
+                  {
+                    "not": {
+                      "$ref": "#/$defs/ipv6LinkLocalCidr"
+                    }
+                  }
+                ]
+              },
+              "uniqueItems": true,
+              "default": []
+            }
+          },
+          "additionalProperties": true,
+          "default": {}
+        }
+      },
+      "additionalProperties": true,
+      "default": {}
+    },
+    "ipAddress": {
+      "type": "string",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ipv4Address"
+        },
+        {
+          "$ref": "#/$defs/ipv6Address"
+        }
+      ]
+    },
+    "cidr": {
+      "type": "string",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ipv4Cidr"
+        },
+        {
+          "$ref": "#/$defs/ipv6Cidr"
+        }
+      ]
+    },
+    "ipv4Address": {
+      "type": "string",
+      "pattern": "^(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}$"
+    },
+    "ipv4Cidr": {
+      "type": "string",
+      "pattern": "^(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}/([0-9]|[12][0-9]|3[0-2])$"
+    },
+    "ipv6Address": {
+      "type": "string",
+      "pattern": "^([0-9A-Fa-f:.]+)$"
+    },
+    "ipv6Cidr": {
+      "type": "string",
+      "pattern": "^([0-9A-Fa-f:.]+)/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$"
+    },
+    "ipv6LinkLocalCidr": {
+      "type": "string",
+      "pattern": "^[Ff][Ee][89AaBb][0-9A-Fa-f]:[0-9A-Fa-f:.]*/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$"
+    }
+  }
+}
