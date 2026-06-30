@@ -2380,7 +2380,6 @@ cmd_audit_file(){
   echo
   echo "File audit complete."
 }
-_audit_issue() { printf "  [issue] %s\n" "$*"; }
 
 # Packages that --purge:NAME may never target.
 _PROTECTED_PURGE_PKGS=(systemd udev libudev1 libsystemd0 dbus init)
@@ -2606,7 +2605,8 @@ _audit_apply_fixes(){
           .interfaces[($e.value.parent + "." + ($e.value.vlan_id | tostring))] = $e.value |
           del(.interfaces[$e.key])
         )' "$CANDIDATE")"
-        jwrite "$CANDIDATE" <<< "$_fixed"
+        local _vtmp; _vtmp="$(candidate_tmp_path)"
+        printf '%s\n' "$_fixed" > "$_vtmp" && mv "$_vtmp" "$CANDIDATE"
         echo "  Done. Run 'ip-mgr validate && ip-mgr commit' to apply."
         ;;
       recommit|rerender)
@@ -3307,10 +3307,8 @@ _snapshot_create(){
   dir="$SNAPS/$ts"
   mkdir -p "$dir"
 
-  printf '{"timestamp":"%s","reason":"%s"}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    "$reason" \
-    > "$dir/meta.json"
+  jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg reason "$reason" \
+    '{"timestamp":$ts,"reason":$reason}' > "$dir/meta.json"
 
   ip -json link  > "$dir/ip-link.json"  2>/dev/null || true
   ip -json addr  > "$dir/ip-addr.json"  2>/dev/null || true
