@@ -2,9 +2,9 @@
 Project: ip-mgr.sh
 
 Goal:
-Build a Bash-based network administration utility for Debian Bookworm/Trixie-style Linux servers that normalizes networking onto systemd-networkd/systemd-resolved. The purpose is to avoid the usual Linux networking hodgepodge of NetworkManager, ifupdown, netplan, dhcpcd, hand-edited files, DHCP clients, resolver state, etc.
+Build a Bash-based network administration utility for CLI-first Linux workstations and servers that normalizes the wild Linux networking collage onto systemd-networkd/systemd-resolved. The purpose is to avoid the usual Linux networking hodgepodge of NetworkManager, ifupdown, netplan, dhcpcd, hand-edited files, DHCP clients, resolver state, etc. and all of their various configuration requirements and syntaxes by using this script as the policy-staging and management plane.
 
-The design borrows VyOS’ configuration model, not necessarily its syntax:
+The design borrows from the VyOS configuration model, but not its syntax/cli:
 - deterministic config
 - one authoritative expected state
 - candidate edits
@@ -15,14 +15,14 @@ The design borrows VyOS’ configuration model, not necessarily its syntax:
 - actual/live interrogation
 
 Core terminology:
-- candidate: staged JSON config being edited
-- expected: last committed ip-mgr-managed JSON config
-- actual: current OS/kernel/network state, generated live by interrogation; never authoritative
-- snapshot: historical capture before major operations
+* implementation zones:
+  - candidate: ephemeral transaction log-file
+  - expected: last committed ip-mgr-managed JSON config
+  - actual: current OS/kernel/network state, generated live by interrogation; never authoritative
+  - snapshot: the last historical implementation
 
 Primary state location:
   /etc/ip-mgr/
-    candidate.json
     expected.json
     commits/
     snapshots/
@@ -31,7 +31,6 @@ Primary state location:
 Versioning:
 - Script should have SCRIPT_VERSION, starting around 0.3.x/0.4.x.
 - JSON should have schema_version.
-- Add a `version` command that prints tool version + schema version.
 - Keep CHANGELOG.md.
 
 Preferred project layout:
@@ -60,43 +59,43 @@ Deployment note:
 Implementation language:
 - Bash is preferred.
 - jq is acceptable and expected.
-- Do not use C++ unless the script becomes truly unmanageable.
 
 CLI grammar:
-  ip-mgr.sh [-4|-6] [-y|--yes] COMMAND [TARGET_INTERFACE] [OPTIONS...]
+  ip-mgr.sh [-4|-6] [-y|--yes] COMMAND [TARGET_OBJECT] [OPTIONS...]
 
 Core commands:
-  set
   add
-  remove
-  show
-  compare
-  validate
-  commit
-  confirm
-  rollback
+  audit
   clean
   detect
-  audit
+  commit
+  compare
+  confirm
+  help
+  remove
+  set
+  show
   snapshot
   status
+  validate
   version
-  help
 
 Remove aliases:
   delete, del, rem, rm, no => remove
 
 Command abbreviation rules:
 - Commands can be abbreviated to a unique prefix.
-- Minimum abbreviation length is 2 characters.
+- Minimum abbreviation length is 2 characters, but enough must be given to disambiguate the command from all others.
 - Ambiguous abbreviations must error.
 - Examples:
     se => set
     sh => show
     va => validate
-    cl => clean
-    co => error, ambiguous between commit/compare
     c  => error, too short
+    cl => clean
+    co => error, ambiguous between commit/compare/confirm
+    com => error, ambiguous between commit and compare
+    comp => compare
 
 Interface validation:
 - For normal interface operations, target interface must exist under /sys/class/net.
@@ -111,7 +110,7 @@ Interface validation:
   Avoid `ls /sys/class/net`.
 
 Options:
-- Long and short forms should exist because repeatable switches get tiresome.
+- Long and short forms should exist because long repeatable switches get tiresome fast.
 
 Address:
   -a:ADDR
@@ -209,12 +208,6 @@ Compare:
 - Future:
     compare snapshot:latest expected
 
-Expected/candidate JSON:
-- expected.json and candidate.json exist on disk.
-- actual is generated on demand, preferably into a mktemp path or stdout.
-- Avoid hardcoded /tmp/ip-mgr-actual.json because concurrent invocations race.
-- If a function needs actual JSON as a file, use mktemp and clean up.
-
 Actual JSON:
 - Generated from current OS state using ip/networkctl/resolvectl where useful.
 - It should distinguish:
@@ -253,14 +246,7 @@ IPv6 link-local rules:
 
 Gateway caveat:
 - IPv6 default gateways are often router LLAs.
-- Do not silently skip them.
-- Current short-term behavior may skip LLA gateways with a clear note:
-    NOTE: IPv6 LLA gateway fe80::... on eth0 skipped; scoped LLA gateways not supported yet
-- Long-term design should support scoped gateways, probably as objects:
-    gateways: [
-      { "address": "fe80::1", "family": 6, "interface": "eth0", "scope": "link" }
-    ]
-- Renderer should eventually emit proper systemd-networkd [Route] entries, likely with GatewayOnLink=yes where needed.
+- Mark them as 'observed', but leave it to RA to repopulate the interface.
 
 IPv6 options:
 - Prefer grouped policy:
@@ -368,7 +354,7 @@ Detect:
     manager-specific introspection
 
 Clean:
-- This is high priority and next major feature.
+- This is a high-priority feature.
 - Purpose: normalize target server from existing live networking to ip-mgr/systemd-networkd.
 - Clean is not a single action; it is a staged pipeline.
 - Pipeline:
@@ -564,7 +550,6 @@ v0.7.0:
   comments (#) and blank lines ignored; stops on first error; elevation
   done once upfront (exec sudo inherits the stdin pipe).
 
-Next milestone:
 v0.8.0 (candidates):
 - Real-target field test on Debian Bookworm and Trixie hardware.
 - Fix any issues discovered during field testing.
@@ -584,12 +569,103 @@ v0.8.0 (candidates):
 - Manpage (ip-mgr.1).
 - CHANGELOG.md populated from git log.
 
+Next milestone: v2.0.0
+Intended additional features:
+- wireguard configuration/management
+- wlan/wifi configuration/management
+Optional additional features:
+- other tunnel types (ipsec/ike, gre/nhrp, openVPN)
+- support for a different linux network control plane (NetworkManager?)
+
 Coding preference:
-- Avoid dumping huge code into chat.
-- Work in VS Code/Codex with files and diffs.
 - Keep functions modular.
 - Commit small logical steps.
 - Bash strict mode is desired:
     set -euo pipefail
   but be careful with commands that intentionally return nonzero.
   
+Guiding Principles:
+
+ip-mgr Design Principles
+
+1. Be Deterministic:
+
+* the JSON state is authoritative.
+* generated files are disposable.
+
+2. Be Transactional:
+
+> No command except 'commit' shall alter the running configuration.
+
+3. Single Source of Truth
+
+Expected, Actual and Snapshot are all NetworkState objects.
+
+4. Human Readable
+
+JSON should remain understandable without documentation.
+Default output format should be as human-readable as possible
+
+5. Normalize Intent
+
+Accept reasonable user shorthand.
+Reject ambiguous intent.
+
+6. Backend Independence
+
+The internal model is independent of the underlying control plane stack.
+
+7. Modular
+
+Renderer, validator, cleaner and parser are separate subsystems.
+
+8. Safe by Default
+
+Snapshot before destructive actions.
+
+9. Idempotent
+
+Running the same commit twice should produce no changes.
+
+10. Explicit Beats Implicit
+
+Prefer deterministic configuration over hidden defaults.
+
+11. Future-Proof
+
+Schema changes should be additive wherever practical.
+
+12. The IR Is the Contract
+
+The NetworkState schema is ip-mgr's intermediate representation and
+compatibility contract. Candidate, Expected, Actual and Snapshot are
+all the same document type — they differ only in origin and semantics.
+
+13. Importer/Renderer Independence
+
+Importers and renderers MUST communicate only through NetworkState.
+They MUST NOT depend on each other's implementation details.
+A new importer (OpenWRT, VyOS) or a new renderer (nftables, uci) is a
+drop-in backend against the same IR.
+
+14. Observed Fields Are Debug Info
+
+The observed.* fields are diagnostic evidence attached to the IR — not
+configuration intent. They record what the system actually had at import
+time. They MUST NOT influence rendered output and MUST NOT be promoted
+into candidate/expected without explicit user action.
+
+15. Passes Read or Write, Not Both
+
+Each pipeline pass either reads the IR (report, analyze, validate) or
+mutates it (transform, render). A pass that does both is doing two jobs
+and should be split. Mixing display output with mutation is a sign that
+stages have collapsed — separate them.
+
+16. Global Flags Are Universal
+
+Global switches (-4, -6, -y) MUST be respected consistently across all
+commands where they are meaningful. A flag accepted at the top level must
+not silently disappear mid-dispatch. Any command that operates on
+address families or requires confirmation MUST honor the flag without
+requiring the user to repeat it per-subcommand.
