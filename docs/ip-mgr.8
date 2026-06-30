@@ -1,0 +1,838 @@
+.TH IP-MGR 8 "2026-06-30" "ip-mgr 1.0.0" "System Administration"
+.SH NAME
+ip-mgr \- deterministic network-state manager for systemd-networkd hosts
+.SH SYNOPSIS
+.B ip-mgr.sh
+.RB [ \-4 | \-6 ]
+.RB [ \-y | \-\-yes ]
+.I COMMAND
+.RI [ TARGET ]
+.RI [ OPTIONS... ]
+.PP
+.B ip-mgr.sh
+.RB [ \-4 | \-6 ]
+.RB [ \-y | \-\-yes ]
+.BR set | add
+.I IFACE
+.I OPTIONS...
+.PP
+.B ip-mgr.sh
+.RB [ \-4 | \-6 ]
+.RB [ \-y | \-\-yes ]
+.BR remove | delete | del | rem | rm | no
+.I IFACE
+.RI [ OPTIONS... ]
+.PP
+.B ip-mgr.sh show
+.RI [ candidate | expected | actual | \-\-file: PATH ]
+.RI [ IFACE | dns: | domains: | ntp: | route: ]
+.RB [ \-\-as\-commands ]
+.PP
+.B ip-mgr.sh compare
+.RI [ SOURCE ]
+.RI [ TARGET ]
+.PP
+.B ip-mgr.sh validate
+.PP
+.B ip-mgr.sh commit
+.RB [ \-\-safe\-window [ : N ]]
+.RB [ \-\-no\-safe\-window ]
+.PP
+.B ip-mgr.sh confirm
+.PP
+.B ip-mgr.sh rollback
+.PP
+.B ip-mgr.sh discard
+.PP
+.B ip-mgr.sh apply
+.I file.json
+.RB [ \-\-save ]
+.RB [ \-\-confirm ]
+.RB [ \-\-safe\-window [ : N ]]
+.RB [ \-\-no\-safe\-window ]
+.PP
+.B ip-mgr.sh clean
+.RB [ \-\-adopt\-live ]
+.RB [ \-\-no\-dhcp ]
+.RB [ \-\-to\-dhcp ]
+.RB [ \-\-no\-candidate ]
+.RB [ \-\-apply ]
+.RB [ \-\-confirm ]
+.RB [ \-\-no\-disable ]
+.RB [ \-\-safe\-window [ : N ]]
+.RB [ \-\-no\-safe\-window ]
+.PP
+.B ip-mgr.sh audit
+.RB [ \-\-file: PATH ]
+.RB [ \-\-fix ]
+.RB [ \-\-purge [ : all | : PKG,... ]]
+.RB [ \-\-confirm ]
+.PP
+.B ip-mgr.sh detect
+.br
+.B ip-mgr.sh snapshot
+.br
+.B ip-mgr.sh status
+.br
+.B ip-mgr.sh version
+.br
+.B ip-mgr.sh help
+.SH DESCRIPTION
+.B ip-mgr
+is a Bash network administration utility for Debian Bookworm/Trixie-style
+Linux servers.  It normalizes host networking onto
+.BR systemd-networkd ,
+.BR systemd-resolved ,
+and
+.BR systemd-timesyncd .
+.PP
+The tool uses a VyOS-like state model: edit a candidate JSON state, review
+it, validate it, then commit it.  Generated systemd files are treated as
+disposable output.  The JSON NetworkState is the authoritative intermediate
+representation.
+.PP
+The four state types are:
+.TP
+.B candidate
+The editable staged configuration stored at
+.IR /etc/ip-mgr/candidate.json .
+.TP
+.B expected
+The last successfully committed ip-mgr-managed configuration stored at
+.IR /etc/ip-mgr/expected.json .
+.TP
+.B actual
+A fresh live interrogation of the host, generated on demand.
+.TP
+.B snapshot
+A timestamped historical capture under
+.IR /etc/ip-mgr/snapshots/ .
+.SH STATE DIRECTORY
+The primary state directory is
+.IR /etc/ip-mgr/ .
+Common paths are:
+.TP
+.I /etc/ip-mgr/candidate.json
+Editable candidate state.
+.TP
+.I /etc/ip-mgr/expected.json
+Last committed expected state.
+.TP
+.I /etc/ip-mgr/commits/
+Rollback history, saved as timestamped expected-state JSON.
+.TP
+.I /etc/ip-mgr/snapshots/
+Pre-change and manually requested runtime captures.
+.TP
+.I /etc/ip-mgr/last-commit
+Timestamp of the last committed revision.
+.TP
+.I /etc/ip-mgr/secrets/
+Rendered PPPoE password secret files.
+.SH COMMAND ABBREVIATION
+Commands may be abbreviated to a unique prefix of at least two characters.
+For example,
+.B se
+resolves to
+.BR set ,
+.B sh
+resolves to
+.BR show ,
+and
+.B va
+resolves to
+.BR validate .
+Ambiguous prefixes fail.  For example,
+.B co
+is ambiguous between
+.B compare
+and
+.BR commit .
+A one-character command is too short.
+.PP
+The aliases
+.BR delete ,
+.BR del ,
+.BR rem ,
+.BR rm ,
+and
+.B no
+all resolve to
+.BR remove .
+.SH GLOBAL OPTIONS
+.TP
+.B \-4
+Limit the operation to IPv4 values where the command supports address-family
+selection.
+.TP
+.B \-6
+Limit the operation to IPv6 values where the command supports address-family
+selection.
+.TP
+.BR \-y ", " \-\-yes
+Answer yes to confirmation prompts.  This is mainly useful for
+non-interactive
+.BR clean ,
+.BR audit ,
+and
+.B apply
+workflows.
+.SH EDIT COMMANDS
+.SS set and add
+.B set
+and
+.B add
+modify
+.I candidate.json
+only.  They do not directly change the running network stack.
+.PP
+In v1.0.0,
+.B add
+is implemented as an alias for
+.BR set .
+List-valued options append and deduplicate values.  Repeatable switches and
+comma-separated values are both accepted.
+.PP
+Examples:
+.EX
+ip-mgr.sh set eth0 -a:10.0.10.2/24 -g:10.0.10.1
+ip-mgr.sh -6 add eth0 -a:2602:f925:a::400:0/64
+ip-mgr.sh set eth0 --address 10.0.10.3/24 --mtu 1500
+ip-mgr.sh add eth0 -a:10.0.10.4/24,10.0.10.5/24
+.EE
+.SS remove
+.B remove
+modifies
+.I candidate.json
+only.  With an option value, it removes the matching value.  With a bare
+clearable option, it clears the selected collection.  With no options, it
+removes VLAN and PPPoE interface definitions only.
+.PP
+Examples:
+.EX
+ip-mgr.sh remove eth0 -a:10.0.10.4/24
+ip-mgr.sh -4 remove eth0 --address
+ip-mgr.sh remove eth1.100
+ip-mgr.sh no pppoe0
+.EE
+.SH INTERFACE OPTIONS
+.TP
+.BR \-a: ADDR ", " \-\-address: ADDR
+Add a static CIDR address.  Space-separated form is also accepted:
+.BR \-\-address " " ADDR .
+IPv6 link-local addresses are rejected as managed static addresses.
+.TP
+.BR \-g: ADDR ", " \-\-gateway: ADDR ", " \-\-gw: ADDR
+Add a default gateway.  Link-local IPv6 gateways are not rendered in v1.0.0
+and are rejected for managed gateway configuration.
+.TP
+.BR \-d: ADDR ", " \-\-dns: ADDR
+Add a per-interface DNS server.
+.TP
+.BR \-s: DOMAIN ", " \-\-search: DOMAIN
+Add a per-interface search domain.
+.TP
+.BR \-m: N ", " \-\-mtu: N
+Set MTU.  The JSON schema allows MTU values from 576 through 65535.
+.TP
+.BR \-D: TEXT ", " \-\-description: TEXT
+Set a candidate description string.  Descriptions are stored in state but are
+not otherwise operational.
+.TP
+.BR \-h ", " \-\-dhcp
+Enable DHCP for the selected family.  With no
+.B \-4
+or
+.B \-6
+selector, DHCPv4 is enabled and IPv6 DHCP plus RA acceptance are enabled.
+.TP
+.BR \-n ", " \-\-ra ", " \-\-ndpra
+Enable IPv6 Router Advertisement acceptance on the interface.  The
+.B --ndpra
+form is accepted for compatibility, but the old
+.B ndpra
+IPv6 option value is not.
+.TP
+.BR \-6o: LIST ", " \-\-options: LIST
+Set IPv6 automatic-addressing policy.  Valid values are
+.BR stable ,
+.BR privacy ,
+and
+.BR none .
+This option is only valid with
+.BR \-6 .
+If
+.B none
+is present, it overrides the other IPv6 automatic-addressing options and
+sets IPv6 DHCP and RA acceptance false.
+.TP
+.BR \-u ", " \-\-up
+Mark the interface enabled in candidate state.
+.TP
+.BR \-x ", " \-\-down
+Mark the interface disabled in candidate state.
+.SH PSEUDO-TARGETS
+Pseudo-targets are used in place of an interface name.
+.SS dns:
+Manage global DNS resolver addresses.
+.EX
+ip-mgr.sh add dns: 8.8.8.8 2001:4860:4860::8888
+ip-mgr.sh remove dns: 8.8.8.8
+ip-mgr.sh -4 remove dns:
+.EE
+A bare
+.B remove dns:
+requires
+.B \-4
+or
+.B \-6
+and clears all global DNS values of that family.
+.SS domains: and domain:
+Manage global search domains.
+.EX
+ip-mgr.sh add domains: internal.example example.com
+ip-mgr.sh remove domains:
+ip-mgr.sh remove domain: internal.example
+.EE
+A bare
+.B remove domains:
+clears all global search domains.
+.B domain:
+is singular and requires explicit names when removing.
+.SS ntp:
+Manage global NTP servers for
+.BR systemd-timesyncd .
+Values may be hostnames or IP addresses.
+.EX
+ip-mgr.sh add ntp: pool.ntp.org 192.168.1.1
+ip-mgr.sh remove ntp: pool.ntp.org
+.EE
+.SS route:
+Manage static routes stored under the target interface.
+.EX
+ip-mgr.sh add route: --net 10.0.120.0/23 --via 10.0.8.2 --if eth0 --metric 50
+ip-mgr.sh -6 add route: --net 2602:f925:f::/48 --via 2602:f925:a::1 --if eth0
+ip-mgr.sh remove route: --net 10.0.120.0/23 --if eth0
+ip-mgr.sh remove route: --net 10.0.120.0/23 --if eth0 --metric
+.EE
+The
+.B --metric
+form on
+.B remove route:
+clears the route metric without removing the route.
+.SH VLANS
+An interface name matching
+.I PARENT.VLANID
+is treated as a VLAN sub-interface.  For example,
+.I eth1.100
+sets
+.I parent
+to
+.I eth1
+and
+.I vlan_id
+to
+.IR 100 .
+.PP
+VLAN interfaces may be defined before the VLAN device exists in
+.IR /sys/class/net .
+The parent must be managed by ip-mgr before commit.  Commit renders a
+.B .netdev
+file for the VLAN and adds a
+.B VLAN=
+line to the parent
+.B .network
+file.
+.PP
+Examples:
+.EX
+ip-mgr.sh add eth1.100 -a:10.0.100.1/24
+ip-mgr.sh remove eth1.100
+.EE
+.SH PPPOE
+PPPoE interfaces are declared by setting a parent interface with
+.BR \-i: IFACE
+or
+.BR \-\-if: IFACE .
+This changes the candidate interface kind to
+.B pppoe
+and transport to
+.BR tunnel .
+.PP
+Options:
+.TP
+.BR \-i: IFACE ", " \-\-if: IFACE
+Bind the PPPoE session to a parent Ethernet interface.
+.TP
+.BR \-\-identity: USER
+Set the PPPoE username.
+.TP
+.BR \-\-pass: PASSWORD
+Encrypt the PPPoE password using
+.B systemd-creds
+before storing it in the NetworkState.  Plaintext is not stored.
+.TP
+.BR \-\-svcname: NAME
+Set the optional PPPoE service name.
+.PP
+Commit renders the PPPoE section into the parent interface's
+.B .network
+file and writes a decrypted secret file under
+.IR /etc/ip-mgr/secrets/ .
+Secret files are recreated during render.
+.PP
+Examples:
+.EX
+ip-mgr.sh add pppoe0 -i:eth0 --identity:user@isp.net --pass:secret
+ip-mgr.sh set pppoe0 --pass:newpassword
+ip-mgr.sh remove pppoe0
+.EE
+.SH SHOW
+.B show
+prints a state object, an interface object, or a pseudo-target object.
+.PP
+If no state is provided,
+.B candidate
+is used.  Supported states are
+.BR candidate ,
+.BR expected ,
+.BR actual ,
+and
+.BR \-\-file: PATH .
+.B actual
+is generated fresh on each invocation.
+.PP
+Examples:
+.EX
+ip-mgr.sh show
+ip-mgr.sh show candidate
+ip-mgr.sh show expected eth0
+ip-mgr.sh show actual dns:
+ip-mgr.sh show --file:backup.json route:
+ip-mgr.sh show candidate --as-commands
+.EE
+.PP
+With
+.BR \-\-as\-commands ,
+the selected state is rendered back into ip-mgr command syntax.
+.SH COMPARE
+.B compare
+performs a sorted unified JSON diff between two states.  The default is:
+.EX
+ip-mgr.sh compare expected candidate
+.EE
+This default makes candidate additions appear as
+.B +
+lines.
+.PP
+Examples:
+.EX
+ip-mgr.sh compare
+ip-mgr.sh compare expected actual
+ip-mgr.sh compare candidate expected
+ip-mgr.sh compare --file:before.json actual
+.EE
+.SH VALIDATE
+.B validate
+checks
+.I candidate.json
+for JSON validity, supported interface
+.B transport
+and
+.B kind
+values, invalid managed IPv6 link-local addresses, VLAN parent validity,
+and PPPoE consistency.
+.PP
+A successful validation prints:
+.EX
+candidate validates
+.EE
+.SH COMMIT
+.B commit
+validates the candidate, checks renderer capability, saves the previous
+expected state into
+.IR /etc/ip-mgr/commits/ ,
+renders systemd files, enables/restarts
+.BR systemd-networkd ,
+.BR systemd-resolved ,
+and
+.BR systemd-timesyncd ,
+then promotes candidate to expected.
+.PP
+Rendered files include:
+.TP
+.I /etc/systemd/network/10-ip-mgr-IFACE.network
+systemd-networkd interface files.
+.TP
+.I /etc/systemd/network/10-ip-mgr-IFACE.netdev
+VLAN netdev files.
+.TP
+.I /etc/systemd/resolved.conf.d/ip-mgr.conf
+Global DNS and search-domain policy.
+.TP
+.I /etc/systemd/timesyncd.conf.d/ip-mgr.conf
+Global NTP policy.
+.PP
+.B commit
+also rewires
+.I /etc/resolv.conf
+to
+.I /run/systemd/resolve/stub-resolv.conf
+and backs up a regular-file
+.I /etc/resolv.conf
+once to
+.IR /etc/resolv.conf.ip-mgr-bak .
+.SH SAFE WINDOW AND CONFIRM
+When running over SSH,
+.B commit
+automatically arms a default 60-second auto-rollback timer unless disabled.
+Trial
+.B apply
+always arms an auto-rollback timer unless disabled.
+.PP
+Options:
+.TP
+.B \-\-safe\-window
+Arm the default safe window explicitly.
+.TP
+.BI \-\-safe\-window: N
+Arm an
+.I N
+second window.  The minimum is 10 seconds.
+.TP
+.B \-\-no\-safe\-window
+Do not arm auto-rollback.  Use carefully on remote systems.
+.PP
+Run
+.B ip-mgr.sh confirm
+after a successful remote apply or commit to cancel the pending timer and
+make the configuration permanent.
+.PP
+If no timer is active,
+.B confirm
+is idempotent and reports that no pending auto-rollback was found.
+.SH ROLLBACK AND DISCARD
+.TP
+.B rollback
+Restores the previous expected state from
+.IR /etc/ip-mgr/commits/ ,
+copies it to candidate, renders networkd files, and restarts
+.BR systemd-networkd .
+.TP
+.B discard
+Copies expected state back over candidate state without touching the live
+network.  Use this to abandon staged edits.
+.SH APPLY
+.B apply
+renders and activates a NetworkState JSON file without using the normal
+candidate-edit workflow.
+.PP
+The source file must be valid JSON with
+.B schema_version
+set to
+.BR 1 .
+The source state is merged over current expected state; source fields win,
+and unmentioned interfaces/settings are preserved from expected.
+.PP
+Without
+.BR \-\-save ,
+.B apply
+is trial mode: it renders and restarts the systemd network stack, then arms
+auto-rollback unless
+.B \-\-no\-safe\-window
+is supplied.  Run
+.B confirm
+to keep the result.
+.PP
+With
+.BR \-\-save ,
+.B apply
+promotes the result permanently by harvesting the post-apply running state
+as the new expected state and copying it to candidate.
+.PP
+Examples:
+.EX
+ip-mgr.sh apply subset.json
+ip-mgr.sh confirm
+ip-mgr.sh apply subset.json --save
+ip-mgr.sh apply subset.json --safe-window:120
+.EE
+.SH CLEAN
+.B clean
+normalizes an existing host into ip-mgr/systemd-networkd control.  It is a
+staged pipeline:
+.PP
+.RS
+Snapshot \(-> Detect \(-> Acquire \(-> Report \(-> Transform \(-> Analyze \(-> Validate \(-> Compare \(-> Write
+.RE
+.PP
+By default, it captures live state, reports what was found, generates and
+validates a candidate for review, and does not apply it.
+.PP
+Options:
+.TP
+.BR \-\-adopt\-live ", " \-\-adopt\-actual
+Adopt live state into candidate.  This is the default v1.0.0 behavior.
+.TP
+.B \-\-no\-dhcp
+Ignore discovered dynamic DHCP/RA lease addresses.
+.TP
+.B \-\-to\-dhcp
+Convert discovered static assignments into DHCPv4 / RA+DHCPv6 intent.
+.TP
+.B \-\-no\-candidate
+Analyze and report without writing
+.IR candidate.json .
+This also suppresses apply and old-stack disable behavior.
+.TP
+.BR \-\-apply ", " \-\-commit
+Commit the generated candidate after confirmation.
+.TP
+.B \-\-confirm
+Skip the interactive
+.B \-\-apply
+prompt.
+.TP
+.B \-\-no\-disable
+With
+.BR \-\-apply ,
+leave competing network control-plane services running.
+.TP
+.B \-\-disable\-old
+With
+.BR \-\-apply ,
+disable competing network control-plane services.  This is the default
+unless
+.B \-\-no\-disable
+or
+.B \-\-no\-candidate
+is used.
+.TP
+.BR \-\-scorched\-earth ", " \-\-force
+More aggressive mode.  Requires
+.BR \-\-apply .
+.PP
+Examples:
+.EX
+ip-mgr.sh clean
+ip-mgr.sh clean --no-candidate
+ip-mgr.sh clean --no-dhcp --to-dhcp
+ip-mgr.sh clean --apply --confirm --safe-window:120
+.EE
+.SH STATUS
+.B status
+is implemented as
+.B clean --no-candidate
+with any additional arguments passed through.  It reports/detects/analyzes
+without writing candidate state.
+.SH DETECT
+.B detect
+reports installed, enabled, active, and configured network-control stacks,
+including
+.BR systemd-networkd ,
+.BR NetworkManager ,
+.BR networking ,
+.BR dhcpcd ,
+.BR connman ,
+.BR netplan ,
+and
+.BR systemd-resolved .
+It also reports interface ownership evidence when supporting tools such as
+.B nmcli
+or
+.B networkctl
+are available.
+.SH AUDIT
+.B audit
+investigates the host against the last committed expected state.  It reports
+schema consistency, expected-state presence, control-plane health, rendered
+file presence, and drift between expected and live state.
+.PP
+Options:
+.TP
+.BI \-\-file: PATH
+Audit a JSON state file rather than the live host.
+.TP
+.B \-\-fix
+Apply safe remediations, such as disabling competing stacks or restoring
+expected rendered state.
+.TP
+.B \-\-purge
+With
+.BR \-\-fix ,
+purge packages for disabled competing stacks.
+.TP
+.B \-\-purge:all
+With
+.BR \-\-fix ,
+purge all known competing stacks.  The systemd stack is protected.
+.TP
+.BI \-\-purge: PKG,...
+With
+.BR \-\-fix ,
+purge named packages.
+.TP
+.B \-\-confirm
+Skip interactive prompts.
+.SH SNAPSHOT
+.B snapshot
+creates a timestamped directory under
+.I /etc/ip-mgr/snapshots/
+containing runtime network state, actual JSON, candidate/expected JSON if
+present, relevant configuration directories, resolver state where available,
+and route/rule diagnostics.
+.PP
+Captured files include
+.BR ip-link.json ,
+.BR ip-addr.json ,
+.BR ip-route4.json ,
+.BR ip-route6.json ,
+.BR actual.json ,
+and copies of relevant configuration directories.
+.SH VERSION
+.B version
+prints the tool version and NetworkState schema version.
+.PP
+Example:
+.EX
+ip-mgr version 1.0.0
+schema version 1
+.EE
+.SH BATCH MODE
+If
+.B ip-mgr.sh
+is run with no command-line arguments and standard input is a pipe or
+heredoc, it reads one ip-mgr subcommand per line.
+Blank lines and lines beginning with
+.B #
+are ignored after comment stripping.  Execution stops on the first error.
+.PP
+Example:
+.EX
+ip-mgr.sh <<'EOF'
+set eth0 -a:10.0.10.2/24 -g:10.0.10.1
+add dns: 10.0.10.230
+compare expected candidate
+commit --safe-window:120
+EOF
+.EE
+.SH ACTUAL STATE AND OBSERVED DATA
+Actual state is generated from the running OS using tools such as
+.BR ip ,
+.BR networkctl ,
+and resolver tooling where available.
+.PP
+Observed-only interfaces, such as WireGuard, tun/tap, GRE, Docker, veth,
+bridges, and bonds, are included with
+.B managed=false
+unless ip-mgr has explicit rendering support for their lifecycle.
+Their runtime addresses are recorded as observed evidence rather than
+managed intent.
+.PP
+IPv6 link-local addresses are observed evidence and must not be stored as
+managed static addresses.  Dynamic DHCPv4 and RA/SLAAC addresses are also
+runtime evidence unless explicitly adopted by a clean/apply workflow.
+.SH RENDERER NOTES
+The v1.0.0 renderer targets
+.BR systemd-networkd ,
+.BR systemd-resolved ,
+and
+.BR systemd-timesyncd .
+It can render managed Ethernet, Wi-Fi-shaped Ethernet, VLAN, PPPoE, default
+gateways, static routes, static addresses, per-interface DNS/search domains,
+global DNS/search domains, global NTP, DHCP policy, RA policy, and IPv6
+privacy/stable policy.
+.PP
+Scoped/on-link IPv6 link-local gateways are not safely rendered in v1.0.0
+and are blocked by renderer capability validation.
+.SH FILES
+.TP
+.I /etc/ip-mgr/candidate.json
+Candidate state.
+.TP
+.I /etc/ip-mgr/expected.json
+Expected state.
+.TP
+.I /etc/ip-mgr/commits/
+Rollback history.
+.TP
+.I /etc/ip-mgr/snapshots/
+Snapshots.
+.TP
+.I /etc/ip-mgr/secrets/
+Rendered PPPoE secrets.
+.TP
+.I /etc/systemd/network/10-ip-mgr-*.network
+Rendered systemd-networkd network files.
+.TP
+.I /etc/systemd/network/10-ip-mgr-*.netdev
+Rendered VLAN netdev files.
+.TP
+.I /etc/systemd/resolved.conf.d/ip-mgr.conf
+Rendered global resolver policy.
+.TP
+.I /etc/systemd/timesyncd.conf.d/ip-mgr.conf
+Rendered NTP policy.
+.TP
+.I /etc/resolv.conf.ip-mgr-bak
+One-time backup of a pre-existing regular-file
+.IR /etc/resolv.conf .
+.SH REQUIREMENTS
+.B ip-mgr
+requires a systemd-based Linux system.  Required tools checked at startup
+include
+.BR jq ,
+.BR ip ,
+.BR diff ,
+and
+.BR systemctl .
+Some optional inspections use tools such as
+.BR nmcli ,
+.BR networkctl ,
+and
+.BR resolvectl
+when present.
+.PP
+PPPoE password storage requires
+.BR systemd-creds .
+.SH EXIT STATUS
+.TP
+.B 0
+Command completed successfully.
+.TP
+.B non-zero
+The command failed, validation failed, a dependency was missing, a prompt was
+declined, an unsafe or unsupported state was requested, or a live apply/commit
+operation failed.
+.SH EXAMPLES
+.EX
+# Stage static IPv4 and IPv6 addressing.
+ip-mgr.sh set eth0 -a:10.0.10.2/24 -g:10.0.10.1
+ip-mgr.sh -6 add eth0 -a:2602:f925:a::400:0/64 -n -6o:stable
+
+# Add global resolver and NTP policy.
+ip-mgr.sh add dns: 10.0.10.230
+ip-mgr.sh add domains: botanybay.net
+ip-mgr.sh add ntp: pool.ntp.org
+
+# Review, validate, and commit with a longer safe window.
+ip-mgr.sh compare expected candidate
+ip-mgr.sh validate
+ip-mgr.sh commit --safe-window:120
+ip-mgr.sh confirm
+
+# Convert an existing host into a candidate, review, then apply.
+ip-mgr.sh clean
+ip-mgr.sh compare expected candidate
+ip-mgr.sh clean --apply --confirm
+.EE
+.SH SEE ALSO
+.BR systemd.network (5),
+.BR systemd.netdev (5),
+.BR systemd-networkd.service (8),
+.BR systemd-resolved.service (8),
+.BR systemd-timesyncd.service (8),
+.BR ip (8),
+.BR jq (1)
+.SH AUTHOR
+Net-Xpert Consulting / Brett Leuszler.
